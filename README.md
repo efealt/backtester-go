@@ -16,6 +16,13 @@ Consumer projects provide ordered bars, timestamp-aligned target exposures, and
 one explicit configuration object. Strategy signal generation and market-data
 download stay outside this library.
 
+`Run` executes one independently configured economic rule. It does not infer
+candidate, benchmark, buy-and-hold, or cash semantics from the target pattern.
+Every `Config` field, including `Exits`, applies to every position in that run.
+When comparing multiple rules, give each run the configuration its rule is
+supposed to follow. Copying a `Config` also retains its exit policies; clear
+`Exits` explicitly when a baseline must not inherit strategy-specific exits.
+
 Each `MarketBar` requires `Timestamp` and `Close`. `Open`, `High`, and `Low` may
 all be omitted for a closing-price-only run; otherwise all three must form a
 valid OHLC bar.
@@ -86,6 +93,9 @@ backtesting or accounting wrappers.
 
 Executable package examples show rule-based, model-based, and externally
 generated targets. All three call the same `Run` function directly.
+`ExampleRun_independentConfigurations` shows a candidate and a constant-exposure
+baseline using different exit configurations while sharing the same accounting
+assumptions.
 
 ## Configuration
 
@@ -102,7 +112,7 @@ All rates and exposures are decimal values unless stated otherwise.
 | `CashAnnualRate` | Annual return on uninvested cash; `0.04` means 4% per year. |
 | `FinancingAnnualRate` | Annual financing cost on exposure beyond `+/-1`; `0.06` means 6% per year. |
 | `PeriodsPerYear` | Expected number of supplied bars in one year. It converts annual rates to per-bar rates and annualizes statistics. |
-| `Exits` | Optional stop-loss and take-profit policies. |
+| `Exits` | Optional stop-loss and take-profit policies applied to every position in this run. No target pattern is automatically exempt. |
 
 `PeriodsPerYear` must match the frequency and calendar of the supplied bars.
 Common examples are:

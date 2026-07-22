@@ -138,6 +138,46 @@ func ExampleExitPolicies() {
 	// Output: stop_loss fixed 95.00 0
 }
 
+func ExampleRun_independentConfigurations() {
+	fixedStop := 0.05
+	candidateConfig := backtester.DefaultConfig()
+	candidateConfig.InitialExposure = 1
+	candidateConfig.Exits.StopLoss = &backtester.StopLossPolicy{
+		FixedPercent:              &fixedStop,
+		Timing:                    backtester.ExitSameBar,
+		TriggeredExposureFraction: 0,
+		WaitForSignalChange:       true,
+	}
+
+	baselineConfig := candidateConfig
+	baselineConfig.Exits = backtester.ExitPolicies{}
+
+	first := time.Date(2025, time.January, 2, 0, 0, 0, 0, time.UTC)
+	bars := []backtester.MarketBar{
+		{Timestamp: first, Open: 100, High: 100, Low: 100, Close: 100},
+		{Timestamp: first.AddDate(0, 0, 1), Open: 100, High: 101, Low: 94, Close: 96},
+		{Timestamp: first.AddDate(0, 0, 2), Open: 96, High: 111, Low: 96, Close: 110},
+		{Timestamp: first.AddDate(0, 0, 3), Open: 110, High: 121, Low: 110, Close: 120},
+	}
+	targets := make([]backtester.Target, len(bars))
+	for index, bar := range bars {
+		targets[index] = backtester.Target{Timestamp: bar.Timestamp, Exposure: 1}
+	}
+
+	candidate, err := backtester.Run(bars, targets, candidateConfig)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	baseline, err := backtester.Run(bars, targets, baselineConfig)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("candidate exits: %d; baseline return: %.0f%%\n", len(candidate.ExitEvents), baseline.Metrics.TotalReturn*100)
+	// Output: candidate exits: 1; baseline return: 20%
+}
+
 func closeOnlyBars(closes ...float64) []backtester.MarketBar {
 	first := time.Date(2025, time.January, 2, 0, 0, 0, 0, time.UTC)
 	bars := make([]backtester.MarketBar, len(closes))

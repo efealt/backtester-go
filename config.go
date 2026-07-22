@@ -97,7 +97,9 @@ type Config struct {
 	// converts annual rates to per-bar rates and annualizes result statistics.
 	// For example: monthly=12, daily US markets=252, and four-hour 24/7=2190.
 	PeriodsPerYear float64 `json:"periods_per_year"`
-	// Exits contains optional stop-loss and take-profit policies.
+	// Exits contains optional stop-loss and take-profit policies applied to every
+	// position in this run. Run does not infer benchmark semantics or exempt
+	// constant target exposures from these policies.
 	Exits ExitPolicies `json:"exits"`
 }
 
