@@ -1,6 +1,7 @@
 package backtester_test
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -176,6 +177,42 @@ func ExampleRun_independentConfigurations() {
 	}
 	fmt.Printf("candidate exits: %d; baseline return: %.0f%%\n", len(candidate.ExitEvents), baseline.Metrics.TotalReturn*100)
 	// Output: candidate exits: 1; baseline return: 20%
+}
+
+func ExampleEvaluate() {
+	bars := closeOnlyBars(100, 110, 121, 121)
+	targets := make([]backtester.Target, len(bars))
+	for index, bar := range bars {
+		targets[index] = backtester.Target{Timestamp: bar.Timestamp, Exposure: 1}
+	}
+
+	config := backtester.DefaultConfig()
+	cashConfig := config
+	spec := backtester.EvaluationSpec{
+		References: &backtester.ReferenceEvaluationSpec{Items: []backtester.FixedTargetReference{
+			{Name: "cash", TargetExposure: 0, Config: cashConfig},
+		}},
+		Scaling: &backtester.ScalingEvaluationSpec{Multipliers: []float64{2}},
+		Split:   &backtester.ChronologicalSplitSpec{FirstFraction: 0.5},
+		Folds:   &backtester.ChronologicalFoldsSpec{Count: 2},
+	}
+
+	evaluation, err := backtester.Evaluate(context.Background(), bars, targets, config, spec)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf(
+		"primary %.0f%%; %s %.0f%%; 2x %.0f%%; split %d/%d; folds %d\n",
+		evaluation.FullPeriod.Primary.Metrics.TotalReturn*100,
+		evaluation.FullPeriod.References[0].Name,
+		evaluation.FullPeriod.References[0].Result.Metrics.TotalReturn*100,
+		evaluation.Scaling[0].Result.Metrics.TotalReturn*100,
+		evaluation.Split.FirstIntervals,
+		evaluation.Split.SecondIntervals,
+		len(evaluation.Folds),
+	)
+	// Output: primary 10%; cash 0%; 2x 20%; split 1/2; folds 2
 }
 
 func closeOnlyBars(closes ...float64) []backtester.MarketBar {

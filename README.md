@@ -97,6 +97,134 @@ generated targets. All three call the same `Run` function directly.
 baseline using different exit configurations while sharing the same accounting
 assumptions.
 
+## Complete evaluation operation
+
+Use `Run` when one set of bars, targets, and accounting assumptions is the
+complete job. Use `Evaluate` when the same validated primary rule also needs an
+explicit set of fixed-target references, target scales, or chronological
+partitions. `Evaluate` calls the same accounting implementation as `Run`; it
+does not reimplement costs, exits, trades, paths, metrics, or ruin behavior.
+
+```go
+marketConfig := config
+marketConfig.InitialExposure = 1
+marketConfig.Exits = backtester.ExitPolicies{}
+
+cashConfig := config
+cashConfig.InitialExposure = 0
+cashConfig.Exits = backtester.ExitPolicies{}
+
+evaluation, err := backtester.Evaluate(
+	context.Background(),
+	bars,
+	targets,
+	config,
+	backtester.EvaluationSpec{
+		References: &backtester.ReferenceEvaluationSpec{
+			Items: []backtester.FixedTargetReference{
+				{Name: "market", TargetExposure: 1, Config: marketConfig},
+				{Name: "cash", TargetExposure: 0, Config: cashConfig},
+			},
+		},
+		Scaling: &backtester.ScalingEvaluationSpec{
+			Multipliers: []float64{0.5, 1, 2},
+		},
+		Split: &backtester.ChronologicalSplitSpec{
+			FirstFraction: 0.8,
+		},
+		Folds: &backtester.ChronologicalFoldsSpec{
+			Count: 4,
+		},
+	},
+)
+```
+
+The full-period primary run always executes. Every `EvaluationSpec` field is
+otherwise independent and opt-in: nil disables it, while non-nil requires a
+complete declaration. The zero-value spec runs only the primary. Enabling one
+component never enables another.
+
+### References
+
+`ReferenceEvaluationSpec.Items` is an ordered list of caller-named
+`FixedTargetReference` values. The library creates one timestamp-aligned target
+per bar at `TargetExposure`. Each reference receives its own complete `Config`;
+it does not inherit or clear any primary setting. In particular, the reference
+config's `InitialExposure` is held before its first delayed fixed target
+executes, and its `Exits` apply normally.
+
+Names must be non-empty, unique, and free of leading or trailing whitespace.
+Target exposure must be finite. The library assigns no meaning to a name or
+exposure: market, cash, benchmark, control, and any other interpretation remain
+caller concepts.
+
+### Scaling
+
+`ScalingEvaluationSpec.Multipliers` contains ordered, unique, finite values
+greater than zero. Each value creates an independent full-period run by
+multiplying every primary target exposure and the primary config's
+`InitialExposure`. Timestamps and every other config field remain unchanged.
+The returned `ScaledResult` pairs each multiplier with its complete `Result`.
+Scaling is not crossed with references, split partitions, or folds.
+
+### Chronological split
+
+`ChronologicalSplitSpec.FirstFraction` is a finite decimal fraction strictly
+between zero and one. For `N = len(bars)-1` return intervals, the first
+partition receives `floor(N * FirstFraction)` intervals and the second receives
+the remainder. Both must receive at least one interval.
+
+The first slice ends at the shared boundary bar, and the second starts at that
+same bar. Therefore every return interval appears exactly once:
+
+```text
+bars:      T0  T1  T2  T3  T4  T5
+first:     [-----------]
+second:                [-------]
+intervals:  1   2   3   4   5
+```
+
+For a `0.6` split of these five intervals, `First` uses `T0..T3`, `Second`
+uses `T3..T5`, `BoundaryTimestamp` is `T3`, and
+`FirstSecondIntervalEndTimestamp` is `T4`. Both partitions independently
+start from each scenario's declared starting capital and initial exposure.
+Position and equity state do not flow across the boundary. Each partition
+contains the primary plus the same references declared for the full period.
+
+These are evaluations of already-produced fixed targets. They do not fit,
+refit, train, or validate a strategy or model, and the library does not label
+either partition in-sample or out-of-sample.
+
+### Chronological folds
+
+`ChronologicalFoldsSpec.Count` is exact, positive, and no greater than the
+number of return intervals. For zero-based fold `i`, the interval boundaries
+are `first = i*N/Count` and `last = (i+1)*N/Count`; the fold runs bars and
+targets `[first:last+1]`. Adjacent folds share only their boundary bar, folds
+are returned in chronological order with one-based indexes, and every return
+interval appears once. Each fold is an independent primary run; the library
+never silently reduces the requested count or carries state between folds.
+
+### Validation, cancellation, and results
+
+`Evaluate` validates the primary input and every derived reference, scale, and
+partition before any accounting run begins. Empty enabled components, duplicate
+names or multipliers, non-finite values, invalid configs, scaling overflow,
+empty split partitions, and impossible fold counts return errors without
+partial results.
+
+The context is checked after validation and before and after every constituent
+run. `Run` itself remains synchronous, so cancellation observed during one run
+is returned immediately after that run finishes and before another begins.
+
+`Evaluation.FullPeriod` contains the primary `Result` and ordered named
+references. Optional output fields are omitted from JSON when disabled.
+`Scaling` contains independent scaled results, `Split` contains two independent
+comparisons and exact interval metadata, and `Folds` contains independent
+primary results. The operation contains no strategy generation, parameter
+selection, market-data retrieval, persistence, presentation, or claim that a
+result represents an edge.
+
 ## Configuration
 
 All rates and exposures are decimal values unless stated otherwise.
@@ -245,6 +373,8 @@ Additional behavior:
 
 - Ordered OHLC market bars and timestamp-aligned target exposures from any
   strategy, model, or research script.
+- One complete, explicit evaluation operation for named fixed-target references,
+  target scaling, chronological splits, and chronological folds.
 - Closing-price-only series are also supported; intrabar and gap behavior is
   used only when OHLC data is available.
 - Explicit execution lag and timing with causal signal-to-position alignment.

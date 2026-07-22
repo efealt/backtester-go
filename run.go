@@ -7,7 +7,10 @@ func Run(bars []MarketBar, targets []Target, config Config) (Result, error) {
 	if err := ValidateInputs(bars, targets, config); err != nil {
 		return Result{}, err
 	}
+	return runValidated(bars, targets, config), nil
+}
 
+func runValidated(bars []MarketBar, targets []Target, config Config) Result {
 	equity := config.StartingCapital
 	peak := equity
 	state := initialRunState(config.InitialExposure, bars[0].Close, config)
@@ -39,5 +42,5 @@ func Run(bars []MarketBar, targets []Target, config Config) (Result, error) {
 
 	trades := tradeTracker.result(state.exposure)
 	metrics := calculateMetrics(path, trades, config)
-	return Result{Path: path, Trades: trades, ExitEvents: exitEvents, Metrics: metrics, Ruined: ruined}, nil
+	return Result{Path: path, Trades: trades, ExitEvents: exitEvents, Metrics: metrics, Ruined: ruined}
 }

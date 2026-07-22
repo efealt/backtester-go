@@ -37,6 +37,7 @@ use (
 	consumerTest := `package consumer_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -64,6 +65,26 @@ func TestDirectRun(t *testing.T) {
 	}
 	if len(result.Path) != 3 || len(result.Trades) != 1 || len(result.ExitEvents) != 0 || result.Metrics.TradeCount != 1 || result.Ruined {
 		t.Fatalf("unexpected complete result: %+v", result)
+	}
+
+	evaluation, err := backtester.Evaluate(
+		context.Background(),
+		bars,
+		targets,
+		config,
+		backtester.EvaluationSpec{
+			References: &backtester.ReferenceEvaluationSpec{
+				Items: []backtester.FixedTargetReference{
+					{Name: "cash", TargetExposure: 0, Config: config},
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if len(evaluation.FullPeriod.Primary.Path) != 3 || len(evaluation.FullPeriod.References) != 1 {
+		t.Fatalf("unexpected evaluation: %+v", evaluation)
 	}
 }
 `
